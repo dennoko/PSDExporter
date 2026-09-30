@@ -15,7 +15,7 @@ namespace DennokoWorks.Tool.PSDExporter.TextureIO
     /// 1 回のエクスポート (またはプレビュー生成) の間、対象テクスチャのインポート設定を一括で一時変更し、
     /// Dispose で必ず元に戻す。変更前にジャーナルを保存し、クラッシュ時も次回起動時に復元できる。
     /// </summary>
-    public sealed class TextureAccessSession : IDisposable
+    public sealed class TextureAccessSession : ITextureSource
     {
         private readonly ImporterRestoreJournal _journal;
         private readonly List<ImporterSettingsSnapshot> _modified = new List<ImporterSettingsSnapshot>();
