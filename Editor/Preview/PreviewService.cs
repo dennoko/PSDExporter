@@ -20,6 +20,7 @@ namespace DennokoWorks.Tool.PSDExporter.Preview
         private readonly ExportPipeline.TextureSourceFactory _sourceFactory;
         private readonly PreviewTextureCache _cache = new PreviewTextureCache();
         private readonly List<string> _warnings = new List<string>();
+        private bool _disposed;
 
         public PreviewService(ExportPipeline.TextureSourceFactory sourceFactory)
         {
@@ -60,6 +61,7 @@ namespace DennokoWorks.Tool.PSDExporter.Preview
         public bool Refresh(ExportProject project, int slotIndex, int revision)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+            if (_disposed) return false;
 
             _cache.Clear();
             _warnings.Clear();
@@ -109,7 +111,11 @@ namespace DennokoWorks.Tool.PSDExporter.Preview
             GeneratedSlotIndex = -1;
         }
 
-        public void Dispose() => _cache.Dispose();
+        public void Dispose()
+        {
+            _disposed = true;
+            _cache.Dispose();
+        }
 
         private RgbaImage ReadDownscaled(ITextureSource source, Texture2D texture)
         {
