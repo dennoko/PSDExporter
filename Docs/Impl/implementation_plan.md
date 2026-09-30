@@ -10,7 +10,7 @@
 
 | # | 方針 | 具体策 |
 |---|------|--------|
-| P1 | 依存方向を一方向に固定する | `UI → Application → Pipeline → (TextureIO / Output / Core)` の一方向のみ。下位層は上位層を知らない。 |
+| P1 | 依存方向を一方向に固定する | `UI → App → Pipeline → (TextureIO / Output / Core)` の一方向のみ。下位層は上位層を知らない。 |
 | P2 | Unity 非依存部分を最大化する | PSD バイナリ生成・画像処理・レイヤー合成は `noEngineReferences: true` の Core アセンブリに置き、純粋な C# (byte 配列) で完結させる。EditMode テストが容易になる。 |
 | P3 | 拡張点はインターフェース + 戦略パターン | 切り抜き方式・補助レイヤー (背景/未分類)・テクスチャ読み込み方式・出力先を差し替え可能にする。 |
 | P4 | 副作用を境界に閉じ込める | TextureImporter 書き換え・ファイル I/O・AssetDatabase 操作は専用モジュールのみが行い、`IDisposable` スコープで確実に原状復帰する。 |
@@ -34,7 +34,7 @@
 graph TD
     subgraph Editor["dennokoworks.PSDExporter.Editor (UnityEditor 依存)"]
         UI["UI (暫定 IMGUI)<br/>PSDExporterWindow"]
-        APP["Application<br/>PSDExporterController / LayerTreeOperations / Validation"]
+        APP["App<br/>PSDExporterController / LayerTreeOperations / Validation"]
         MODEL["Model<br/>ExportProject / LayerTreeNode / TextureSlot"]
         PIPE["Pipeline<br/>ExportPipeline / ProjectResolver / MaskCache"]
         TIO["TextureIO<br/>TextureAccessSession / ImporterOverride / RestoreJournal"]
@@ -68,7 +68,7 @@ graph TD
 * `Core.Psd` は `Core.Imaging` の型 (ピクセルバッファ) のみ参照可。レイヤーツリーや切り抜き方式は知らない。
 * `Core.Composition` は `Imaging` と `Psd` を使うが、Unity 型・ファイル I/O は知らない。
 * `Editor.Model` は純粋なデータ ([Serializable]) のみ。ロジックを持たない。
-* `Editor.UI` は `Application` と `Preview` 以外を直接参照しない。
+* `Editor.UI` は `App` と `Preview` 以外を直接参照しない。
 
 ---
 
@@ -135,10 +135,9 @@ PSDExporter/
 │   │   ├── LayerTreeNode.cs               # 抽象ノード ([SerializeReference])
 │   │   ├── GroupNode.cs
 │   │   ├── MaskLayerNode.cs
-│   │   ├── MaskChannel.cs                 # Luminance / Red / Green / Blue / Alpha
 │   │   ├── ExportOptions.cs               # 切り抜き方式・背景・未分類・読み込み品質
 │   │   └── OutputSettings.cs              # 出力フォルダ・接頭辞・上書きポリシー
-│   ├── Application/
+│   ├── App/                               # ※ UnityEngine.Application との名前衝突を避けるため "App"
 │   │   ├── PSDExporterState.cs            # ExportProject を保持する ScriptableObject (Undo/Serialize 用)
 │   │   ├── PSDExporterController.cs       # UI から呼ばれる唯一の窓口
 │   │   ├── LayerTreeOperations.cs         # 追加/削除/移動/グループ化 (純粋なモデル操作)
@@ -620,12 +619,12 @@ public sealed class ExportPipeline
 }
 ```
 
-依存は全てコンストラクタ注入。既定の組み立ては `ExportPipelineFactory.CreateDefault()` (static) に集約し、テストでは差し替える。
+依存は全てコンストラクタ注入。既定の組み立ては `ExportPipeline.CreateDefault()` (static) に集約し、テストでは差し替える。
 
 **処理手順**
 
 ```
-1. ProjectValidator.Validate(project) → エラーがあれば中断 (レポートに格納)
+1. (検証は呼び出し側の PSDExporterController が実行済み。Pipeline は App 層に依存しない)
 2. OutputPathResolver で全スロットの出力パスを事前決定 (上書き確認はここで UI に問い合わせ済みであること)
 3. using (session = TextureAccessSession(全テクスチャ))
    using (maskCache = new MaskCache(session))
@@ -674,7 +673,7 @@ public sealed class ExportPipeline
 
 ---
 
-## 11. Editor.Application モジュール (UI との境界)
+## 11. Editor.App モジュール (UI との境界)
 
 ### 11.1 `PSDExporterState` (ScriptableObject)
 
@@ -852,3 +851,21 @@ public sealed class PSDExporterController
 | Q2 | 未分類領域が空のとき、レイヤーを出力するかスキップするか | 初期版は空レイヤーとして出力 + 警告。要望次第でオプション化 |
 | Q3 | 背景レイヤーを PSD の真の「背景」(ロック付き) にするか通常レイヤーにするか | 初期版は通常レイヤー (名前のみ「Background / 元画像」)。アルファ付きテクスチャを扱うため |
 | Q4 | グループ/レイヤーの初期名・スロットのサフィックス候補 (BaseColor, Normal, …) | `UIText` / 定数として UI 層で提供。モデルは任意文字列 |
+
+---
+
+## 18. 実装時の差分メモ (2026-10-01 プロトタイプ実装)
+
+計画から変更・具体化した点。
+
+| 項目 | 計画 | 実装 |
+|------|------|------|
+| App 層の名前 | `Editor/Application/` | `Editor/App/` (名前空間 `DennokoWorks.Tool.PSDExporter.App`)。`UnityEngine.Application` との衝突回避 |
+| `MaskChannel` | `Editor/Model/MaskChannel.cs` | `Core/Imaging/MaskChannel.cs`。マスク抽出 (`MaskExtractor`) を Core に置いたため。`MaskChannel.Luminance` は「輝度 × アルファ」 |
+| テクスチャ取得の抽象 | `TextureAccessSession` を直接使用 | `ITextureSource` を追加し、Pipeline / Preview / MaskCache はこれにのみ依存 |
+| 検証の呼び出し位置 | Pipeline の手順 1 | `PSDExporterController.Export` で検証してから Pipeline を実行 (Pipeline → App の逆依存を避ける) |
+| `ILayerRenderer.Render` | `(source, mask, spec)` | `(source, mask)`。レイヤー属性は Composer が付与する |
+| `IPsdFileSink` | コンストラクタでインポート有無を受け取る | `ResolvedOutput.ImportAfterWrite` で出力ごとに指定 (Sink はステートレス) |
+| プレビューの読み込み品質 | 規定なし | 再インポートを減らすため `AsImported` を既定 (`PreviewService.ReadQuality`) |
+| 自動テスト (§15.1) | EditMode テスト一式 | **未実装**。今回は構文チェックのみ。Core は Unity 外のスモークテストで PSD 構造 (レコード順・lsct・luni・マスク・RLE・マージ画像) を読み戻して確認済み |
+| ジャーナルの扱い | 正常終了で削除 | 復元失敗分は残し、次回セッション開始時にも再試行。未復元エントリがあるテクスチャは再スナップショットせず既存エントリを使う |
