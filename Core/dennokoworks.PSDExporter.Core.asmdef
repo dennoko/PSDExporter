@@ -1,0 +1,16 @@
+{
+    "name": "dennokoworks.PSDExporter.Core",
+    "rootNamespace": "DennokoWorks.Tool.PSDExporter.Core",
+    "references": [],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": true
+}
